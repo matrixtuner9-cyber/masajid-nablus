@@ -1,4 +1,6 @@
 name: Android APK (trial)
+permissions:
+  contents: write
 on:
   push:
     branches: [main]
@@ -19,3 +21,13 @@ jobs:
         run: bash app/ci_build.sh
       - uses: actions/upload-artifact@v4
         with: { name: masajid-nablus-apk, path: masajid-nablus.apk, retention-days: 30 }
+      - name: Keep the latest APK on branch "apk"
+        run: |
+          mkdir -p /tmp/apkbranch && cp masajid-nablus.apk /tmp/apkbranch/
+          git checkout --orphan apk-tmp
+          git rm -rq --cached .
+          git clean -fdq
+          cp /tmp/apkbranch/masajid-nablus.apk .
+          git add masajid-nablus.apk
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -qm "APK build ${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}"
+          git push -f origin HEAD:apk

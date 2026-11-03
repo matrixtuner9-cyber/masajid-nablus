@@ -538,6 +538,17 @@ function adminAccounts(){
         h('p',{class:'small',style:'margin:0'},'رابط تنزيل تطبيق أندرويد (APK):'),h('a',{href:APK_URL,dir:'ltr',style:'word-break:break-all',class:'small'},APK_URL),
         h('p',{class:'small',style:'margin:0'},'بوابة الأئمة لأجهزة آيفون:'),h('a',{href:SITE+'/imam/',dir:'ltr',class:'small'},SITE+'/imam/'),
         h('p',{class:'small muted',style:'margin:0'},'رابط التفعيل الذي يصل الإمام يتعرّف على نوع هاتفه تلقائياً: يعرض تنزيل التطبيق لأندرويد، وبوابة الويب لآيفون.'))),
+    h('div',{class:'panel'},h('h3',null,'تغيير كلمة مرور حسابي (الإدارة)'),
+      h('div',{class:'fgrid'},
+        h('label',{class:'f'},'كلمة المرور الجديدة',h('input',{id:'my-pw1',type:'password',dir:'ltr',autocomplete:'new-password'})),
+        h('label',{class:'f'},'تأكيد كلمة المرور',h('input',{id:'my-pw2',type:'password',dir:'ltr',autocomplete:'new-password'}))),
+      h('p',{class:'small muted',style:'margin:0'},'8 خانات على الأقل، فيها حروف وأرقام.'),
+      h('div',{id:'my-pw-msg'}),
+      h('button',{class:'btn',onclick:async e=>{const a=document.getElementById('my-pw1').value,b=document.getElementById('my-pw2').value,m=document.getElementById('my-pw-msg');
+        const say=(t,err)=>{m.innerHTML='';m.appendChild(h('p',{class:'msg'+(err?' err':'')},t))};
+        if(a.length<8||!/[a-zA-Z\u0600-\u06FF]/.test(a)||!/[0-9]/.test(a))return say('كلمة المرور 8 خانات على الأقل وتحتوي على حروف وأرقام.',1);
+        if(a!==b)return say('التأكيد لا يطابق كلمة المرور.',1);
+        e.target.disabled=true;try{await extAuth.setPassword(a);document.getElementById('my-pw1').value='';document.getElementById('my-pw2').value='';say('تم تغيير كلمة المرور. استخدمها في الدخول القادم.')}catch(x){say('تعذّر التغيير: '+((x&&x.message)||''),1)}e.target.disabled=false}},'حفظ كلمة المرور الجديدة')),
     dyn('accList',()=>{
       const L=S.acc.list;
       if(L===null)return h('div',{class:'loading'},S.acc.msg||'جارٍ تحميل الحسابات…');

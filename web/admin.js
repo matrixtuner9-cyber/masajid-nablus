@@ -79,10 +79,11 @@ async function upgradeMosques(){
     await S.db.doc('org/main/mosques/'+id).set({...rest,codeChk:(await codeHash(id,S.codeDocs[id].code))[0]}).catch(onErr)}
 }
 function renderAdmin(){
+  liveHeader();
   const tabs=[...(window.extAuth?[['accounts','حسابات التطبيق']]:[]),['apps','طلبات التسجيل'],['today','الحضور اليومي'],['monthly','التقارير الشهرية'],['messages','المراسلات'],['leaves','الإجازات'],['month','إحصاء الحضور الشهري'],['lessons','الدروس'],['reports','بلاغات المساجد'],['mosques','المساجد والإعدادات'],['staff','الأئمة والمؤذنون']];
   $('#main').replaceChildren(h('div',{style:'display:grid;gap:16px'},
     h('nav',{class:'tabs'},dyn('adminTabs',()=>tabs.map(([k,l])=>{const n=k==='apps'?S.apps.filter(a=>a.status==='pending').length:k==='monthly'?unreviewedCount():k==='messages'?S.threads.filter(adminUnread).length:k==='leaves'?S.staff.filter(s=>s.uid).reduce((n,s)=>n+leavesOf(s.uid).filter(l=>!l.dec&&!l.cancelled).length,0):0;
-      return h('button',{'aria-pressed':String(S.adminTab===k),onclick:()=>{S.adminTab=k;renderAdmin()}},l,n?h('span',{class:'chip absent',style:'margin-inline-start:6px;padding:0 7px'},n):null)}))),
+      return h('button',{class:'gtab'+(n?' has-badge':''),'aria-pressed':String(S.adminTab===k),onclick:e=>{gRipple(e);S.adminTab=k;renderAdmin()}},gIcon(k),h('span',{class:'gtab-l'},l),n?h('span',{class:'gbadge'},n):null)}))),
     {accounts:adminAccounts,apps:adminApps,leaves:adminLeaves,messages:adminMessages,monthly:adminMonthly,today:adminToday,month:adminMonth,lessons:adminLessons,reports:adminReports,mosques:adminMosques,staff:adminStaff}[S.adminTab]()));
 }
 function openThread(uid){S.openThread=uid;S.thrIn={};S.thrOut={};
@@ -573,4 +574,143 @@ function adminAccounts(){
               h('button',{class:'btn ghost sm',onclick:()=>act(a.banned?'enable':'disable',a)},a.banned?'إعادة التفعيل':'إيقاف'),
               confirmBtn('حذف',()=>act('delete',a))])))})))));
     }));
+}
+
+
+/* ================= Live header + glass tabs (admin) ================= */
+const G_ICONS={
+  accounts:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  apps:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+  today:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+  monthly:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  messages:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>',
+  leaves:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="m14 14-4 4"/><path d="m10 14 4 4"/>',
+  month:'<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  lessons:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  reports:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  mosques:'<path d="M4 21V10"/><path d="M3 10h2"/><path d="M4 7V6"/><path d="M8 21v-7a6 6 0 0 1 12 0v7"/><path d="M14 8V5"/><path d="M3 21h18"/><path d="M12 21v-3a2 2 0 0 1 4 0v3"/>',
+  staff:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'
+};
+function gIcon(k,cls){const sp=document.createElement('span');sp.className='gico '+(cls||'');sp.setAttribute('aria-hidden','true');
+  sp.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(G_ICONS[k]||'')+'</svg>';return sp}
+function gRipple(e){const b=e.currentTarget;if(!b)return;const r=b.getBoundingClientRect(),d=document.createElement('i');d.className='gripple';
+  const z=Math.max(r.width,r.height);d.style.cssText='width:'+z+'px;height:'+z+'px;left:'+(e.clientX-r.left-z/2)+'px;top:'+(e.clientY-r.top-z/2)+'px';b.append(d);setTimeout(()=>d.remove(),650)}
+
+const GOVS=[['نابلس',32.2211,35.2544],['جنين',32.4610,35.2950],['طوباس',32.3209,35.3699],['طولكرم',32.3104,35.0286],['قلقيلية',32.1896,34.9706],['سلفيت',32.0833,35.1806],['رام الله',31.9038,35.2034],['أريحا',31.8667,35.4500],['القدس',31.7683,35.2137],['بيت لحم',31.7054,35.2024],['الخليل',31.5326,35.0998],['غزة',31.5017,34.4668],['خان يونس',31.3462,34.3063],['رفح',31.2969,34.2455]];
+const TZ='Asia/Hebron';
+function govTimes(day,lat,lng){
+  const dg=Math.PI/180,sin=x=>Math.sin(x*dg),cos=x=>Math.cos(x*dg);
+  const acos=x=>Math.acos(Math.max(-1,Math.min(1,x)))/dg,asin=x=>Math.asin(x)/dg,atan2=(y,x)=>Math.atan2(y,x)/dg;
+  const fix=(a,b)=>{a=a-b*Math.floor(a/b);return a<0?a+b:a};
+  let y=day.getFullYear(),m=day.getMonth()+1,d=day.getDate();if(m<=2){y--;m+=12}
+  const A=Math.floor(y/100),B=2-A+Math.floor(A/4);
+  const jd=Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5+0.5-lng/360;
+  const D=jd-2451545,g=fix(357.529+0.98560028*D,360),q=fix(280.459+0.98564736*D,360);
+  const L=fix(q+1.915*sin(g)+0.020*sin(2*g),360),e=23.439-0.00000036*D;
+  const RA=fix(atan2(cos(e)*sin(L),cos(L))/15,24),decl=asin(sin(e)*sin(L)),eqt=((q/15-RA+12)%24+24)%24-12;
+  const noon=12-lng/15-eqt;
+  const T=a=>acos((-sin(a)-sin(decl)*sin(lat))/(cos(decl)*cos(lat)))/15;
+  const asrA=acos((sin(Math.atan(1/(1+Math.tan(Math.abs(lat-decl)*dg)))/dg)-sin(decl)*sin(lat))/(cos(decl)*cos(lat)))/15;
+  const base=Date.UTC(day.getFullYear(),day.getMonth(),day.getDate());
+  const at=hrs=>new Date(Math.ceil((base+hrs*3600e3)/60000)*60000);
+  return{fajr:at(noon-T(19.5)),sunrise:at(noon-T(0.833)),dhuhr:at(noon+2/60),asr:at(noon+asrA),maghrib:at(noon+T(0.833)+2/60),isha:at(noon+T(17.5))};
+}
+const GP=[['fajr','الفجر'],['sunrise','الشروق'],['dhuhr','الظهر'],['asr','العصر'],['maghrib','المغرب'],['isha','العشاء']];
+const fmtT=d=>d.toLocaleTimeString('ar-EG-u-nu-latn',{hour:'numeric',minute:'2-digit',timeZone:TZ});
+function localDay(off){const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+off*864e5)).split('-');return new Date(+p[0],+p[1]-1,+p[2])}
+function nextPrayer(lat,lng,isNablus){
+  const now=Date.now();
+  for(let off=0;off<2;off++){const day=localDay(off);let t=govTimes(day,lat,lng);
+    if(isNablus&&typeof prayerTimes==='function'){try{const o=prayerTimes(day);t={...t,...o}}catch(_){}}
+    for(const[k,n]of GP){if(k==='sunrise')continue;if(t[k].getTime()>now){const prev=GP.filter(x=>x[0]!=='sunrise').map(x=>t[x[0]].getTime()).filter(v=>v<=now).pop();return{k,n:(k==='dhuhr'&&day.getDay()===5)?'الجمعة':n,at:t[k],prev:prev||(t[k].getTime()-6*3600e3),all:t}}}}
+}
+const pad=n=>String(n).padStart(2,'0');
+function left(ms){const s=Math.max(0,Math.floor(ms/1000)),hh=Math.floor(s/3600),mm=Math.floor(s%3600/60),ss=s%60;return hh?hh+':'+pad(mm)+':'+pad(ss):pad(mm)+':'+pad(ss)}
+
+function liveHeader(){
+  if(document.getElementById('liveHdr'))return;
+  const st=document.createElement('style');st.textContent=`
+#liveHdr{position:sticky;top:0;z-index:50;margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px)) 10px;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--olive) 88%,#000) 0%,color-mix(in srgb,var(--olive) 70%,#1d2a14) 55%,#2b3b20 100%);color:#fff;
+  box-shadow:0 10px 30px -12px rgba(20,30,15,.55);overflow:hidden;isolation:isolate}
+#liveHdr::before{content:"";position:absolute;inset:-40% -10%;z-index:-1;background:radial-gradient(40% 60% at 15% 30%,rgba(201,162,74,.35),transparent 60%),radial-gradient(35% 55% at 85% 70%,rgba(255,255,255,.12),transparent 60%);animation:gDrift 18s ease-in-out infinite alternate}
+@keyframes gDrift{to{transform:translate3d(6%,4%,0) rotate(4deg)}}
+#liveHdr .lh-in{max-width:1080px;margin:0 auto;display:grid;gap:10px}
+#liveHdr .lh-top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.lh-clock{display:flex;align-items:center;gap:10px}
+.lh-clock .gico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(8px)}
+.lh-clock .gico svg{animation:gSpin 60s linear infinite}
+@keyframes gSpin{to{transform:rotate(360deg)}}
+.lh-time{font-size:1.7rem;font-weight:800;letter-spacing:.04em;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;text-align:right;line-height:1}
+.lh-time i{font-style:normal;opacity:.55;font-size:1rem;margin-inline-start:2px}
+.lh-date{font-size:.8rem;opacity:.9;line-height:1.35}.lh-date b{font-weight:700}
+.lh-next{display:flex;align-items:center;gap:10px;padding:6px 14px 6px 8px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.lh-ring{--p:0;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#e7c26a calc(var(--p)*1%),rgba(255,255,255,.18) 0);position:relative}
+.lh-ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:#33452a}
+.lh-ring .gico{position:relative;z-index:1;color:#f3d98f}.lh-ring .gico svg{width:18px;height:18px}
+.lh-next.soon .lh-ring{animation:gPulse 1.6s ease-out infinite}
+.lh-next small{display:block;font-size:.72rem;opacity:.85}.lh-next b{font-size:.98rem}.lh-next .cd{font-variant-numeric:tabular-nums;direction:ltr;display:inline-block;font-weight:700;color:#f3d98f}
+.lh-strip{position:relative;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.lh-track{display:flex;gap:8px;width:max-content;animation:gMarq 70s linear infinite}
+.lh-strip:hover .lh-track{animation-play-state:paused}
+@keyframes gMarq{from{transform:translateX(0)}to{transform:translateX(50%)}}
+.gov{display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:12px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap;font-size:.82rem;cursor:default;transition:background .25s,transform .25s}
+.gov:hover{background:rgba(255,255,255,.22);transform:translateY(-2px)}
+.gov .nm{font-weight:700}.gov .pn{opacity:.8}.gov .tm{font-weight:800;color:#f3d98f;font-variant-numeric:tabular-nums}
+.gov .dot{width:7px;height:7px;border-radius:50%;background:#8fe0a3;box-shadow:0 0 0 0 rgba(143,224,163,.7);animation:gDot 2s infinite}
+.gov.soon .dot{background:#ffcf66;animation-duration:1s}
+@keyframes gDot{70%{box-shadow:0 0 0 7px rgba(143,224,163,0)}100%{box-shadow:0 0 0 0 rgba(143,224,163,0)}}
+@keyframes gPulse{0%{box-shadow:0 0 0 0 rgba(243,217,143,.65)}100%{box-shadow:0 0 0 12px rgba(243,217,143,0)}}
+/* glass tabs */
+nav.tabs{gap:10px;padding:4px 0}
+nav.tabs button.gtab{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;padding:9px 16px 9px 14px;border-radius:16px;font-weight:600;
+  color:var(--ink);background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 78%,transparent),color-mix(in srgb,var(--surface) 45%,transparent));
+  border:1px solid color-mix(in srgb,var(--line) 70%,#fff);backdrop-filter:blur(12px) saturate(1.4);-webkit-backdrop-filter:blur(12px) saturate(1.4);
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 6px 18px -10px rgba(40,55,30,.45);transition:transform .25s cubic-bezier(.2,.8,.2,1.2),box-shadow .25s,background .25s,color .25s}
+nav.tabs button.gtab::before{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);transition:left .6s}
+nav.tabs button.gtab:hover{transform:translateY(-3px);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 14px 26px -12px rgba(40,55,30,.55);border-color:color-mix(in srgb,var(--olive) 45%,var(--line))}
+nav.tabs button.gtab:hover::before{left:120%}
+nav.tabs button.gtab:active{transform:translateY(0) scale(.97)}
+nav.tabs .gico{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;color:var(--olive);background:color-mix(in srgb,var(--olive) 13%,transparent);transition:transform .35s cubic-bezier(.3,1.6,.5,1),background .25s,color .25s}
+nav.tabs .gico svg{width:18px;height:18px}
+nav.tabs button.gtab:hover .gico{transform:rotate(-8deg) scale(1.15)}
+nav.tabs button.gtab[aria-pressed="true"]{color:#fff;border-color:transparent;background:linear-gradient(135deg,color-mix(in srgb,var(--olive) 92%,#fff),color-mix(in srgb,var(--olive) 80%,#000));
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 10px 24px -8px color-mix(in srgb,var(--olive) 75%,transparent);animation:gBreath 3.2s ease-in-out infinite}
+nav.tabs button.gtab[aria-pressed="true"] .gico{color:#fff;background:rgba(255,255,255,.2)}
+@keyframes gBreath{50%{box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 14px 34px -6px color-mix(in srgb,var(--olive) 90%,transparent)}}
+.gbadge{min-width:22px;height:22px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;font-size:.75rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#e05a47,#a23a2e);box-shadow:0 0 0 0 rgba(224,90,71,.6);animation:gBadge 1.8s ease-out infinite}
+@keyframes gBadge{0%{box-shadow:0 0 0 0 rgba(224,90,71,.6)}80%,100%{box-shadow:0 0 0 9px rgba(224,90,71,0)}}
+nav.tabs button.has-badge .gico{animation:gNudge 2.8s ease-in-out infinite}
+@keyframes gNudge{0%,86%,100%{transform:none}90%{transform:rotate(-12deg)}94%{transform:rotate(10deg)}}
+.gripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.55);transform:scale(0);animation:gRip .65s ease-out forwards;pointer-events:none}
+@keyframes gRip{to{transform:scale(2.4);opacity:0}}
+@media (max-width:640px){.lh-time{font-size:1.35rem}nav.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:6px}nav.tabs button.gtab{flex:none}}
+@media (prefers-reduced-motion:reduce){#liveHdr *,#liveHdr::before,nav.tabs *{animation:none!important;transition:none!important}.lh-strip{overflow-x:auto}}
+`;document.head.append(st);
+  const hd=document.createElement('div');hd.id='liveHdr';hd.setAttribute('role','banner');
+  hd.innerHTML='<div class="lh-in"><div class="lh-top"><div class="lh-clock"></div><div class="lh-next"></div></div><div class="lh-strip"><div class="lh-track"></div></div></div>';
+  document.body.prepend(hd);
+  hd.querySelector('.lh-clock').append(gIcon('clock'));
+  const clk=document.createElement('div');clk.innerHTML='<div class="lh-time"></div><div class="lh-date"></div>';hd.querySelector('.lh-clock').append(clk);
+  const tEl=clk.querySelector('.lh-time'),dEl=clk.querySelector('.lh-date'),nEl=hd.querySelector('.lh-next'),track=hd.querySelector('.lh-track');
+  const gF=new Intl.DateTimeFormat('ar-EG-u-nu-latn',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:TZ});
+  let hF;try{hF=new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn',{day:'numeric',month:'long',year:'numeric',timeZone:TZ})}catch(_){}
+  function tickClock(){const now=new Date(),p=new Intl.DateTimeFormat('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:TZ}).format(now).split(':');
+    tEl.innerHTML='<bdi dir="ltr">'+p[0]+':'+p[1]+'<i>:'+p[2]+'</i></bdi>';dEl.innerHTML='<b>'+gF.format(now)+'</b>'+(hF?'<br>'+hF.format(now):'')}
+  function govCards(){const items=GOVS.map(([n,la,lo],i)=>{const x=nextPrayer(la,lo,i===0);const soon=x.at-Date.now()<15*60e3;
+      const title=GP.map(([k,nm])=>nm+' '+fmtT(x.all[k])).join(' · ');
+      return '<div class="gov'+(soon?' soon':'')+'" title="'+n+': '+title+'"><span class="dot"></span><span class="nm">'+n+'</span><span class="pn">'+x.n+'</span><span class="tm">'+fmtT(x.at)+'</span></div>'}).join('');
+    track.innerHTML=items+items}
+  function tickNext(){const x=nextPrayer(GOVS[0][1],GOVS[0][2],true),now=Date.now(),pc=Math.min(100,Math.max(0,(now-x.prev)/(x.at-x.prev)*100));
+    nEl.classList.toggle('soon',x.at-now<15*60e3);
+    if(!nEl.firstChild){const r=document.createElement('div');r.className='lh-ring';r.append(gIcon('bell'));nEl.append(r,document.createElement('div'))}
+    nEl.firstChild.style.setProperty('--p',pc.toFixed(1));
+    nEl.lastChild.innerHTML='<small>الصلاة القادمة في نابلس</small><b>'+x.n+' '+fmtT(x.at)+'</b> · <span class="cd">'+left(x.at-now)+'</span>'}
+  let lastMin=-1;
+  const loop=()=>{tickClock();tickNext();const m=new Date().getMinutes();if(m!==lastMin){lastMin=m;govCards()}};
+  loop();setInterval(loop,1000);
 }

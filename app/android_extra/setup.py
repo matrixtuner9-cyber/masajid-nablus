@@ -70,4 +70,6 @@ if 'desugar_jdk_libs' not in t:
 lines=t.split('\n');imp=[l for l in lines if l.startswith('import ')];rest=[l for l in lines if not l.startswith('import ')]
 open(g,'w').write('\n'.join(imp+rest))
 os.makedirs(os.path.join(root,'android/app/src/main/res/drawable'),exist_ok=True)
+raw=os.path.join(root,'android/app/src/main/res/raw');os.makedirs(raw,exist_ok=True)
+open(os.path.join(raw,'keep.xml'),'w').write('<?xml version="1.0" encoding="utf-8"?>\n<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ic_stat,@mipmap/*" tools:shrinkMode="strict" />\n')
 print('android setup ok')

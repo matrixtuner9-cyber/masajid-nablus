@@ -15,17 +15,52 @@ import 'ui.dart';
 final jump = ValueNotifier<String?>(null);
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ar');
-  await Supabase.initialize(url: sbUrl, anonKey: sbKey);
-  await nt.initNotifications(onTap: (p) => jump.value = p);
-  try {
-    final launch = await nt.notif.getNotificationAppLaunchDetails();
-    if (launch?.didNotificationLaunchApp == true) jump.value = launch?.notificationResponse?.payload;
-  } catch (_) {}
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: cOliveDark, statusBarIconBrightness: Brightness.light));
-  runApp(const ImamApp());
-  nt.startBackground();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    ErrorWidget.builder = (d) => Material(child: Center(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText('خطأ: ${d.exception}', textDirection: TextDirection.ltr))));
+    runApp(const Boot());
+  }, (e, st) => debugPrint('uncaught $e'));
+}
+
+class Boot extends StatefulWidget {
+  const Boot({super.key});
+  @override
+  State<Boot> createState() => _BootState();
+}
+class _BootState extends State<Boot> {
+  bool ready = false;
+  String? err;
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+  Future<void> _init() async {
+    try {
+      await initializeDateFormatting('ar');
+      await Supabase.initialize(url: sbUrl, anonKey: sbKey);
+    } catch (e, st) {
+      err = '$e\n$st';
+    }
+    try {
+      await nt.initNotifications(onTap: (p) => jump.value = p);
+      final launch = await nt.notif.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp == true) jump.value = launch?.notificationResponse?.payload;
+    } catch (_) {}
+    try {
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: cOliveDark, statusBarIconBrightness: Brightness.light));
+    } catch (_) {}
+    if (mounted) setState(() => ready = true);
+    if (err == null) nt.startBackground();
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (err != null) {
+      return MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: SafeArea(child: Padding(padding: const EdgeInsets.all(16), child: SingleChildScrollView(child: SelectableText('تعذّر تشغيل التطبيق\n$err', textDirection: TextDirection.ltr))))));
+    }
+    if (!ready) return const MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: Center(child: CircularProgressIndicator())));
+    return const ImamApp();
+  }
 }
 
 class ImamApp extends StatelessWidget {

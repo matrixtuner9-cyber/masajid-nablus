@@ -6,7 +6,7 @@ const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,a
 window.SB=sb;window.SB_URL=SB_URL;
 window.BLOB=SB_URL+'/storage/v1/object/public/photos/';
 window.emailOf=u=>String(u||'').trim().toLowerCase()+'@'+DOMAIN;
-window.APK_URL=SB_URL+'/storage/v1/object/public/app/masajid-nablus.apk';
+window.APK_URL=location.origin+'/app/masajid-nablus.apk';
 
 const clone=o=>o==null?o:JSON.parse(JSON.stringify(o));
 const parent=p=>p.replace(/\/[^/]+$/,'');

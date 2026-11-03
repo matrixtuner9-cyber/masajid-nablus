@@ -20,9 +20,9 @@ ol{margin:0;padding-inline-start:20px;display:grid;gap:6px}.muted{color:var(--mu
 <script>
 const p=new URLSearchParams(location.search),u=(p.get('u')||'').toLowerCase(),c=p.get('c')||'';
 const ua=navigator.userAgent,android=/Android/i.test(ua),ios=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
-const APK='https://waeflhdjgxexwfawgfvh.supabase.co/storage/v1/object/public/app/masajid-nablus.apk';
+const APK=location.origin+'/app/masajid-nablus.apk';
 const portal='/imam/#u='+encodeURIComponent(u)+'&c='+encodeURIComponent(c);
-const intent='intent://activate?u='+encodeURIComponent(u)+'&c='+encodeURIComponent(c)+'#Intent;scheme=masajidnablus;package=ps.awqaf.nablus.imam;end';
+const intent='intent://activate?u='+encodeURIComponent(u)+'&c='+encodeURIComponent(c)+'#Intent;scheme=masajidnablus;package=ps.awqaf.nablus.imam;S.browser_fallback_url='+encodeURIComponent(APK)+';end';
 const m=document.getElementById('m');
 const copy=(t,b)=>navigator.clipboard.writeText(t).then(()=>{b.textContent='نُسخ'}).catch(()=>{});
 let creds=u?`<div class="card"><div class="kv"><span>اسم المستخدم</span><b>${u.replace(/[<>&]/g,'')}</b><button class="btn sm" onclick="copy(u,this)">نسخ</button><span>رمز التفعيل</span><b>${c.replace(/\D/g,'')}</b><button class="btn sm" onclick="copy(c,this)">نسخ</button></div><p class="muted">بعد أول دخول ستُنشئ كلمة مرور خاصة بك، ويتوقف رمز التفعيل عن العمل.</p></div>`:'';

@@ -63,7 +63,7 @@ t=t.replace('buildTypes {','''signingConfigs {
         }
     }
     buildTypes {''',1)
-t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = signingConfigs.getByName("release")')
+t=t.replace('signingConfig = signingConfigs.getByName("debug")','signingConfig = if (keyProps.isEmpty) signingConfigs.getByName("debug") else signingConfigs.getByName("release")')
 if 'desugar_jdk_libs' not in t:
     t+='\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 # kotlin script: imports must be at top

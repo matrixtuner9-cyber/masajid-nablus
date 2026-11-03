@@ -80,8 +80,11 @@ String pPlain(String k) => prayers.firstWhere((p) => p.k == k, orElse: () => con
 
 Map<String, DateTime> rawPrayerTimes(DateTime day) {
   const dg = math.pi / 180;
-  double sin(double x) => math.sin(x * dg), cos(double x) => math.cos(x * dg);
-  double acos(double x) => math.acos(x) / dg, asin(double x) => math.asin(x) / dg, atan2(double y, double x) => math.atan2(y, x) / dg;
+  double sin(double x) => math.sin(x * dg);
+  double cos(double x) => math.cos(x * dg);
+  double acos(double x) => math.acos(x) / dg;
+  double asin(double x) => math.asin(x) / dg;
+  double atan2(double y, double x) => math.atan2(y, x) / dg;
   double fix(double a, double b) {
     a = a - b * (a / b).floorToDouble();
     return a < 0 ? a + b : a;

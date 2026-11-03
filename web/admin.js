@@ -578,6 +578,7 @@ function adminAccounts(){
 
 
 /* ================= Live header + glass tabs (admin) ================= */
+const{gIcon,gRipple,liveHeader}=(()=>{
 const G_ICONS={
   accounts:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
   apps:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
@@ -714,3 +715,5 @@ nav.tabs button.has-badge .gico{animation:gNudge 2.8s ease-in-out infinite}
   const loop=()=>{tickClock();tickNext();const m=new Date().getMinutes();if(m!==lastMin){lastMin=m;govCards()}};
   loop();setInterval(loop,1000);
 }
+
+return{gIcon,gRipple,liveHeader}})();

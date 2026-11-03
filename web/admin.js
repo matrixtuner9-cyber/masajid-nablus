@@ -80,11 +80,11 @@ async function upgradeMosques(){
 }
 function renderAdmin(){
   liveHeader();
-  const tabs=[...(window.extAuth?[['accounts','حسابات التطبيق']]:[]),['apps','طلبات التسجيل'],['today','الحضور اليومي'],['monthly','التقارير الشهرية'],['messages','المراسلات'],['leaves','الإجازات'],['month','إحصاء الحضور الشهري'],['lessons','الدروس'],['reports','بلاغات المساجد'],['mosques','المساجد والإعدادات'],['staff','الأئمة والمؤذنون']];
+  const tabs=[['q360','استعلام 360'],...(window.extAuth?[['accounts','حسابات التطبيق']]:[]),['apps','طلبات التسجيل'],['today','الحضور اليومي'],['monthly','التقارير الشهرية'],['messages','المراسلات'],['leaves','الإجازات'],['month','إحصاء الحضور الشهري'],['lessons','الدروس'],['reports','بلاغات المساجد'],['mosques','المساجد والإعدادات'],['staff','الأئمة والمؤذنون']];
   $('#main').replaceChildren(h('div',{style:'display:grid;gap:16px'},
     h('nav',{class:'tabs'},dyn('adminTabs',()=>tabs.map(([k,l])=>{const n=k==='apps'?S.apps.filter(a=>a.status==='pending').length:k==='monthly'?unreviewedCount():k==='messages'?S.threads.filter(adminUnread).length:k==='leaves'?S.staff.filter(s=>s.uid).reduce((n,s)=>n+leavesOf(s.uid).filter(l=>!l.dec&&!l.cancelled).length,0):0;
       return h('button',{class:'gtab'+(n?' has-badge':''),'aria-pressed':String(S.adminTab===k),onclick:e=>{gRipple(e);S.adminTab=k;renderAdmin()}},gIcon(k),h('span',{class:'gtab-l'},l),n?h('span',{class:'gbadge'},n):null)}))),
-    {accounts:adminAccounts,apps:adminApps,leaves:adminLeaves,messages:adminMessages,monthly:adminMonthly,today:adminToday,month:adminMonth,lessons:adminLessons,reports:adminReports,mosques:adminMosques,staff:adminStaff}[S.adminTab]()));
+    {q360:adminQ360,accounts:adminAccounts,apps:adminApps,leaves:adminLeaves,messages:adminMessages,monthly:adminMonthly,today:adminToday,month:adminMonth,lessons:adminLessons,reports:adminReports,mosques:adminMosques,staff:adminStaff}[S.adminTab]()));
 }
 function openThread(uid){S.openThread=uid;S.thrIn={};S.thrOut={};
   msgMonths().forEach((mk,i)=>{
@@ -577,9 +577,212 @@ function adminAccounts(){
 }
 
 
+/* ================= استعلام 360 + قوالب الطباعة ================= */
+const q3Norm=t=>String(t||'').toLowerCase().replace(/[ً-ْـ]/g,'').replace(/[أإآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+const q3Esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const q3Phone=st=>{const ap=S.apps.find(x=>x.id===st.uid);return(ap&&ap.phone)||S.phones[st.id]||st.phone||''};
+const q3IdNo=st=>{const ap=S.apps.find(x=>x.id===st.uid);return(ap&&ap.idNo)||''};
+const q3User=st=>{const c=st.uid&&S.creds.find(c=>c.id===st.uid);return c?c.username:''};
+const Q3SYM={ok:'✓',late:'م',absent:'غ',bad:'ر',leave:'إ',na:'—',pending:'·',open:'·'};
+function q3Search(q){
+  const n=q3Norm(q);if(!n)return[];
+  const hit=v=>q3Norm(v).includes(n);
+  const st=S.staff.filter(x=>hit(x.name)||hit(x.role)||hit(q3Phone(x))||hit(q3IdNo(x))||hit(q3User(x))||hit(x.subName)||hit(mosque(x.mosqueId)?.name)).map(x=>({t:'s',id:x.id,name:x.name,sub:[x.role,mosque(x.mosqueId)?.name].filter(Boolean).join(' · ')}));
+  const ms=S.mosques.filter(x=>hit(x.name)||hit(x.area)).map(x=>({t:'m',id:x.id,name:x.name,sub:[x.area,S.staff.filter(z=>z.mosqueId===x.id).length+' موظفين'].filter(Boolean).join(' · ')}));
+  return[...ms,...st].slice(0,30);
+}
+function q3StaffData(st){
+  const{days,by,rows}=computeMonth(S.month);
+  const row=rows.find(r=>r.s.id===st.id)||{exp:0,on:0,late:0,bad:0,abs:0,leave:0,rate:null,les:0};
+  const grid=days.map(k=>({k,c:P.map(p=>{const rec=by[st.id]?.[k]?.[p.k];return{st:statusOf(rec,p.k,st,k),rec}})}));
+  const lessons=lessonsOf(S.monthDocs).filter(l=>l.staffId===st.id);
+  const reports=S.reports.filter(r=>r.staffId===st.id||(!r.staffId&&r.mosqueId===st.mosqueId));
+  const leaves=st.uid?leavesOf(st.uid):[];
+  const md=st.uid&&S.monthly.find(d=>d.id===st.uid),mr=md&&md.reports&&md.reports[S.month];
+  return{days,row,grid,lessons,reports,leaves,mr,rv:st.uid?reviewOf(st.uid,S.month):null};
+}
+function q3MosqueData(m){
+  const{rows}=computeMonth(S.month);
+  const staff=rows.filter(r=>r.s.mosqueId===m.id);
+  const allStaff=S.staff.filter(x=>x.mosqueId===m.id);
+  const sum=staff.reduce((a,r)=>{['exp','on','late','bad','abs','leave','les'].forEach(k=>a[k]+=r[k]);return a},{exp:0,on:0,late:0,bad:0,abs:0,leave:0,les:0});
+  sum.rate=sum.exp?Math.round((sum.on+sum.late)/sum.exp*100):null;
+  const lessons=lessonsOf(S.monthDocs).filter(l=>l.mosqueId===m.id);
+  const reports=S.reports.filter(r=>r.mosqueId===m.id);
+  return{staff,allStaff,sum,lessons,reports};
+}
+const q3Rate=r=>r==null?h('span',{class:'muted small'},'—'):h('span',{class:'chip '+(r>=90?'ok':r>=70?'late':'absent')},r+'%');
+const q3Kpi=(n,l,c)=>h('div',{class:'kpi'+(c?' '+c:'')},h('div',{class:'n'},n),h('div',{class:'l'},l));
+function q3Card(title,...kids){return h('div',{class:'panel q3card'},h('h3',null,title),...kids)}
+function q3Table(head,rows){return h('div',{class:'tbl'},h('table',null,h('thead',null,h('tr',null,head.map(x=>h('th',null,x)))),h('tbody',null,rows)))}
+
+function adminQ360(){
+  S.q3=S.q3||{q:'',sel:null};
+  const mIn=h('input',{type:'month',value:S.month,style:'width:auto',onchange:e=>{if(e.target.value){S.month=e.target.value;watchMonth();refresh()}}});
+  const qIn=h('input',{type:'search',value:S.q3.q,placeholder:'ابحث باسم الإمام أو المسجد أو رقم الهاتف أو الهوية أو اسم المستخدم…',class:'q3search',
+    oninput:e=>{S.q3.q=e.target.value;refresh()},onkeydown:e=>{if(e.key==='Enter'){const r=q3Search(S.q3.q);if(r[0]){S.q3.sel={t:r[0].t,id:r[0].id};S.q3.q='';e.target.value='';refresh()}}}});
+  return h('div',{style:'display:grid;gap:16px'},
+    h('style',null,`.q3search{font-size:1.05rem;padding:12px 16px;border-radius:14px}
+.q3res{display:flex;flex-wrap:wrap;gap:8px}.q3res button{font:inherit;cursor:pointer;display:grid;text-align:start;gap:0;padding:8px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);transition:transform .2s,box-shadow .2s}
+.q3res button:hover{transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(40,55,30,.5);border-color:var(--olive)}.q3res small{color:var(--muted)}
+.q3head{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:18px;border-radius:16px;color:#fff;background:linear-gradient(135deg,var(--olive),#2b3b20)}
+.q3head h2{color:#fff;font-weight:700}.q3head p{margin:2px 0 0;opacity:.9;font-size:.88rem}.q3head .btn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);color:#fff}
+.q3grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;align-items:start}
+.q3cal{display:grid;grid-template-columns:auto repeat(5,1fr);gap:3px;font-size:.78rem;text-align:center}
+.q3cal b{font-weight:600;color:var(--muted)}.q3cal span{border-radius:5px;padding:2px 0;font-weight:700}
+.q3-ok{background:var(--ok-bg);color:var(--ok)}.q3-late{background:var(--warn-bg);color:var(--warn)}.q3-absent,.q3-bad{background:var(--bad-bg);color:var(--bad)}.q3-leave{background:#e3e9f6;color:#3b5a9a}.q3-na,.q3-pending,.q3-open{background:var(--idle-bg);color:var(--idle)}
+.q3dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:.9rem}.q3dl dt{color:var(--muted)}.q3dl dd{margin:0;font-weight:600}
+.q3prints{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px}
+.q3prints button{font:inherit;cursor:pointer;display:flex;gap:10px;align-items:center;text-align:start;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);transition:transform .2s,box-shadow .2s}
+.q3prints button:hover{transform:translateY(-2px);box-shadow:0 10px 22px -12px rgba(40,55,30,.55);border-color:var(--olive)}
+.q3prints .gico{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--olive);background:color-mix(in srgb,var(--olive) 13%,transparent)}
+.q3prints small{display:block;color:var(--muted);font-size:.78rem}`),
+    h('div',{class:'row spread'},h('h2',null,'استعلام 360'),h('label',{class:'row small muted'},'الشهر',mIn)),
+    qIn,
+    dyn('q3res',()=>{const r=q3Search(S.q3.q);if(!S.q3.q)return[];
+      if(!r.length)return h('p',{class:'muted small'},'لا نتائج مطابقة.');
+      return h('div',{class:'q3res'},r.map(x=>h('button',{type:'button',onclick:()=>{S.q3.sel={t:x.t,id:x.id};S.q3.q='';qIn.value='';refresh()}},h('b',null,(x.t==='m'?'🕌 ':'👤 ')+x.name),h('small',null,x.sub))))}),
+    dyn('q3body',()=>{
+      const sel=S.q3.sel;
+      if(sel&&sel.t==='s'){const st=staffBy(sel.id);if(st)return q3StaffView(st)}
+      if(sel&&sel.t==='m'){const m=mosque(sel.id);if(m)return q3MosqueView(m)}
+      return q3Overview();
+    }));
+}
+function q3Back(){return h('button',{class:'btn ghost sm',type:'button',onclick:()=>{S.q3.sel=null;refresh()}},'← العودة إلى النظرة العامة')}
+function q3Overview(){
+  const{rows}=computeMonth(S.month);
+  const act=rows.filter(r=>r.rate!=null),avg=act.length?Math.round(act.reduce((a,r)=>a+r.rate,0)/act.length):null;
+  const open=S.reports.filter(r=>repStatus(r)!=='done').length,les=lessonsOf(S.monthDocs).length;
+  const pendLv=S.staff.filter(x=>x.uid).reduce((n,x)=>n+leavesOf(x.uid).filter(l=>!l.dec&&!l.cancelled).length,0);
+  return h('div',{style:'display:grid;gap:16px'},
+    h('div',{class:'kpis'},q3Kpi(S.mosques.length,'مسجد'),q3Kpi(S.staff.length,'إمام ومؤذن وآذن'),q3Kpi(avg==null?'—':avg+'%','متوسط الالتزام في '+monthAr(S.month),avg!=null&&avg<70?'bad':avg!=null&&avg<90?'warn':''),q3Kpi(les,'درس هذا الشهر'),q3Kpi(open,'بلاغ مفتوح',open?'warn':''),q3Kpi(pendLv,'إجازة بانتظار القرار',pendLv?'warn':'')),
+    q3Card('قوالب الطباعة',h('p',{class:'muted small',style:'margin:0'},'تقارير جاهزة بترويسة المديرية وخانات التوقيع، لشهر '+monthAr(S.month)+'. لطباعة ملف إمام أو مسجد ابحث عنه أولاً.'),
+      h('div',{class:'q3prints'},
+        q3PrintBtn('month','تقرير الحضور الشهري العام','جميع الأئمة ونسب الالتزام',()=>q3Print('month')),
+        q3PrintBtn('mosques','تقرير المساجد','الالتزام والدروس والبلاغات لكل مسجد',()=>q3Print('mosques')),
+        q3PrintBtn('lessons','سجل الدروس','كل الدروس المسجّلة في الشهر',()=>q3Print('lessons')),
+        q3PrintBtn('reports','تقرير البلاغات','المفتوحة والمغلقة',()=>q3Print('reports')),
+        q3PrintBtn('leaves','تقرير الإجازات','الطلبات والقرارات',()=>q3Print('leaves')),
+        q3PrintBtn('staff','دليل الأئمة والمؤذنين','الأسماء والمساجد والهواتف',()=>q3Print('directory')))),
+    h('div',{class:'q3grid'},
+      q3Card('الأقل التزاماً هذا الشهر',act.length?q3Table(['الاسم','المسجد','الالتزام'],act.slice(0,8).map(r=>h('tr',{style:'cursor:pointer',onclick:()=>{S.q3.sel={t:'s',id:r.s.id};refresh()}},h('td',null,r.s.name),h('td',{class:'muted'},mosque(r.s.mosqueId)?.name||'—'),h('td',null,q3Rate(r.rate))))):h('p',{class:'muted small'},'لا بيانات حضور بعد.')),
+      q3Card('المساجد',S.mosques.length?q3Table(['المسجد','الموظفون','الالتزام','بلاغات مفتوحة'],S.mosques.map(m=>{const d=q3MosqueData(m);return h('tr',{style:'cursor:pointer',onclick:()=>{S.q3.sel={t:'m',id:m.id};refresh()}},h('td',null,m.name),h('td',{class:'num'},d.allStaff.length),h('td',null,q3Rate(d.sum.rate)),h('td',{class:'num'},d.reports.filter(r=>repStatus(r)!=='done').length))})):h('p',{class:'muted small'},'لا مساجد بعد.'))));
+}
+function q3PrintBtn(icon,t,sub,fn){return h('button',{type:'button',onclick:fn},gIcon('printer'),h('span',null,h('b',null,t),h('small',null,sub)))}
+function q3Cal(grid){
+  return h('div',{class:'q3cal'},h('b',null,'اليوم'),P.map(p=>h('b',null,p.n)),
+    grid.slice().reverse().flatMap(g=>[h('b',null,+g.k.slice(8)),...g.c.map((c,i)=>h('span',{class:'q3-'+c.st,title:(ST[c.st]||'')+(c.rec&&c.rec.at?' '+fmtT(new Date(c.rec.at)):'')},Q3SYM[c.st]||'·'))]));
+}
+function q3StaffView(st){
+  const d=q3StaffData(st),m=mosque(st.mosqueId),r=d.row;
+  const yr=S.month.slice(0,4);
+  return h('div',{style:'display:grid;gap:16px'},
+    q3Back(),
+    h('div',{class:'q3head'},h('div',null,h('h2',null,st.name),h('p',null,[st.role,m?.name,m?.area].filter(Boolean).join(' · '))),
+      h('button',{class:'btn',type:'button',onclick:()=>q3Print('staff',st)},gIcon('printer'),' طباعة ملف 360')),
+    h('div',{class:'kpis'},q3Kpi(r.rate==null?'—':r.rate+'%','نسبة الالتزام',r.rate!=null&&r.rate<70?'bad':r.rate!=null&&r.rate<90?'warn':''),q3Kpi(r.on,'في الوقت'),q3Kpi(r.late,'متأخر','warn'),q3Kpi(r.abs,'غياب','bad'),q3Kpi(r.bad,'مرفوض','bad'),q3Kpi(r.leave,'صلوات بإجازة'),q3Kpi(d.lessons.length,'دروس')),
+    h('div',{class:'q3grid'},
+      q3Card('البيانات الأساسية',h('dl',{class:'q3dl'},
+        h('dt',null,'الصفة'),h('dd',null,st.role||'—'),h('dt',null,'المسجد'),h('dd',null,m?h('a',{href:'#',onclick:e=>{e.preventDefault();S.q3.sel={t:'m',id:m.id};refresh()}},m.name):'—'),
+        h('dt',null,'الهاتف'),h('dd',null,phoneTxt(q3Phone(st))),h('dt',null,'رقم الهوية'),h('dd',null,q3IdNo(st)||'—'),
+        h('dt',null,'اسم المستخدم'),h('dd',{dir:'ltr',style:'text-align:right'},q3User(st)||'—'),h('dt',null,'الحساب'),h('dd',null,st.uid?'مفعّل':'دون حساب'),
+        h('dt',null,'الإمام البديل'),h('dd',null,st.subName||'—'),h('dt',null,'الصلوات المكلّف بها'),h('dd',null,(st.duties||P.map(p=>p.k)).map(k=>P.find(p=>p.k===k)?.n).join('، ')),
+        h('dt',null,'التقرير الشهري'),h('dd',null,d.mr?(d.mr.status==='sent'?(d.rv&&d.rv.status==='reviewed'?'أُرسل وروجع':'أُرسل، بانتظار المراجعة'):'مسودة'):'لم يُرسل'),
+        h('dt',null,'إجازات سنوية '+yr),h('dd',null,st.uid?usedDays(st.uid,'إجازة سنوية',yr)+' يوماً':'—'))),
+      q3Card('سجل الحضور — '+monthAr(S.month),d.grid.length?q3Cal(d.grid):h('p',{class:'muted small'},'لا أيام بعد.'),h('p',{class:'muted small',style:'margin:0'},'✓ في الوقت · م متأخر · غ غياب · ر مرفوض · إ إجازة · — غير مكلّف'))),
+    h('div',{class:'q3grid'},
+      q3Card('الدروس ('+d.lessons.length+')',d.lessons.length?h('div',{class:'list'},d.lessons.slice(0,20).map(lessonItem)):h('p',{class:'muted small'},'لا دروس في هذا الشهر.')),
+      q3Card('الإجازات ('+d.leaves.length+')',d.leaves.length?q3Table(['النوع','من','إلى','الحالة'],d.leaves.slice(0,20).map(l=>h('tr',null,h('td',null,l.type),h('td',null,l.from),h('td',null,l.to),h('td',null,h('span',{class:'chip '+leaveState(l)[0]},leaveState(l)[1]))))):h('p',{class:'muted small'},'لا إجازات.')),
+      q3Card('البلاغات ('+d.reports.length+')',d.reports.length?h('div',{class:'list'},d.reports.slice(0,15).map(x=>reportItem(x,false))):h('p',{class:'muted small'},'لا بلاغات.'))));
+}
+function q3MosqueView(m){
+  const d=q3MosqueData(m),open=d.reports.filter(r=>repStatus(r)!=='done');
+  return h('div',{style:'display:grid;gap:16px'},
+    q3Back(),
+    h('div',{class:'q3head'},h('div',null,h('h2',null,m.name),h('p',null,[m.area,d.allStaff.length+' موظفين'].filter(Boolean).join(' · '))),
+      h('button',{class:'btn',type:'button',onclick:()=>q3Print('mosque',m)},gIcon('printer'),' طباعة تقرير المسجد')),
+    h('div',{class:'kpis'},q3Kpi(d.sum.rate==null?'—':d.sum.rate+'%','التزام المسجد',d.sum.rate!=null&&d.sum.rate<70?'bad':d.sum.rate!=null&&d.sum.rate<90?'warn':''),q3Kpi(d.sum.on,'في الوقت'),q3Kpi(d.sum.late,'متأخر','warn'),q3Kpi(d.sum.abs,'غياب','bad'),q3Kpi(d.lessons.length,'دروس'),q3Kpi(open.length,'بلاغ مفتوح',open.length?'warn':'')),
+    h('div',{class:'q3grid'},
+      q3Card('الكادر',d.allStaff.length?q3Table(['الاسم','الصفة','الالتزام','الهاتف'],d.allStaff.map(x=>{const r=d.staff.find(y=>y.s.id===x.id);return h('tr',{style:'cursor:pointer',onclick:()=>{S.q3.sel={t:'s',id:x.id};refresh()}},h('td',null,x.name),h('td',{class:'muted'},x.role),h('td',null,q3Rate(r?r.rate:null)),h('td',null,phoneTxt(q3Phone(x))))})):h('p',{class:'muted small'},'لا موظفين.')),
+      q3Card('البلاغات ('+d.reports.length+')',d.reports.length?h('div',{class:'list'},d.reports.slice(0,15).map(x=>reportItem(x,false))):h('p',{class:'muted small'},'لا بلاغات.'))),
+    q3Card('الدروس ('+d.lessons.length+')',d.lessons.length?h('div',{class:'list'},d.lessons.slice(0,20).map(lessonItem)):h('p',{class:'muted small'},'لا دروس في هذا الشهر.')));
+}
+
+/* ---------- print templates ---------- */
+function q3Doc(title,sub,body){
+  const now=new Date();
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${q3Esc(title)}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap">
+<style>@page{size:A4;margin:14mm 12mm}*{box-sizing:border-box}body{font-family:Cairo,Tahoma,sans-serif;color:#1d241b;font-size:11.5pt;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.lh{display:flex;align-items:center;justify-content:space-between;border-bottom:3px double #4c6a37;padding-bottom:8px;margin-bottom:12px}
+.lh .r{display:flex;gap:10px;align-items:center}.lh b{display:block;font-size:13pt}.lh small{color:#555;font-size:9.5pt}.lh .l{text-align:left;font-size:9pt;color:#555}
+h1{font-size:16pt;margin:4px 0 2px;color:#2f4a22}.sub{color:#555;margin:0 0 10px;font-size:10pt}
+h2{font-size:12pt;margin:14px 0 6px;color:#2f4a22;border-inline-start:4px solid #c9a24a;padding-inline-start:8px}
+table{width:100%;border-collapse:collapse;font-size:10pt;page-break-inside:auto}tr{page-break-inside:avoid}
+th{background:#e7eddf;font-weight:700}th,td{border:1px solid #b9c2ad;padding:4px 6px;text-align:right}td.c,th.c{text-align:center}
+.kp{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.kp div{flex:1;min-width:90px;border:1px solid #c9d1bd;border-radius:6px;padding:4px 8px}.kp b{display:block;font-size:14pt}.kp span{font-size:8.5pt;color:#555}
+.ok{background:#dcefe2;color:#226b3d}.late{background:#f6ebcf;color:#8a5d0c}.absent,.bad{background:#f6dcd8;color:#9a2f24}.leave{background:#e3e9f6;color:#3b5a9a}.na,.pending,.open{color:#999}
+dl{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:3px 12px;margin:0}dt{color:#555}dd{margin:0;font-weight:700}
+.sig{display:flex;justify-content:space-between;margin-top:36px;gap:20px}.sig div{flex:1;text-align:center;border-top:1px dotted #777;padding-top:4px;font-size:10pt}
+.ft{margin-top:14px;font-size:8.5pt;color:#777;text-align:center}.muted{color:#777}</style></head><body>
+<div class="lh"><div class="r"><svg width="46" height="46" viewBox="0 0 44 44"><rect x="1" y="1" width="42" height="42" rx="9" fill="#4c6a37"/><path d="M22 8c-6 4-10 8-10 14v1h20v-1c0-6-4-10-10-14z" fill="#fff"/><rect x="12" y="24" width="20" height="12" fill="#fff"/><rect x="19" y="28" width="6" height="8" fill="#4c6a37"/></svg>
+<div><b>دولة فلسطين — وزارة الأوقاف والشؤون الدينية</b><small>مديرية أوقاف نابلس · نظام متابعة المساجد</small></div></div>
+<div class="l">تاريخ الطباعة<br><b>${q3Esc(now.toLocaleDateString('ar-PS',{day:'numeric',month:'long',year:'numeric'}))}</b></div></div>
+<h1>${q3Esc(title)}</h1><p class="sub">${q3Esc(sub)}</p>${body}
+<div class="sig"><div>مُعِدّ التقرير</div><div>رئيس قسم الوعظ والإرشاد</div><div>مدير أوقاف نابلس</div></div>
+<div class="ft">صدر من نظام متابعة مساجد نابلس · ${q3Esc(location.host)}</div></body></html>`;
+}
+const q3T=(head,rows)=>'<table><thead><tr>'+head.map(x=>'<th>'+q3Esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.join(''):'<tr><td colspan="'+head.length+'" class="c muted">لا توجد بيانات</td></tr>')+'</tbody></table>';
+const q3R=cells=>'<tr>'+cells.map(c=>typeof c==='object'&&c?'<td class="'+(c.cls||'')+'">'+q3Esc(c.v)+'</td>':'<td>'+q3Esc(c)+'</td>').join('')+'</tr>';
+const q3Kp=items=>'<div class="kp">'+items.map(([n,l])=>'<div><b>'+q3Esc(n)+'</b><span>'+q3Esc(l)+'</span></div>').join('')+'</div>';
+const q3RateCell=r=>({v:r==null?'—':r+'%',cls:'c '+(r==null?'':r>=90?'ok':r>=70?'late':'absent')});
+function q3Print(kind,obj){
+  const mk=S.month,ma=monthAr(mk);let title='',sub='الفترة: '+ma,body='';
+  if(kind==='staff'){const st=obj,d=q3StaffData(st),m=mosque(st.mosqueId),r=d.row;title='ملف 360 — '+st.name;
+    body='<h2>البيانات الأساسية</h2><dl><dt>الصفة</dt><dd>'+q3Esc(st.role||'—')+'</dd><dt>المسجد</dt><dd>'+q3Esc(m?.name||'—')+'</dd><dt>الهاتف</dt><dd dir="ltr" style="text-align:right">'+q3Esc(q3Phone(st)||'—')+'</dd><dt>رقم الهوية</dt><dd>'+q3Esc(q3IdNo(st)||'—')+'</dd><dt>الإمام البديل</dt><dd>'+q3Esc(st.subName||'—')+'</dd><dt>اسم المستخدم</dt><dd>'+q3Esc(q3User(st)||'—')+'</dd></dl>'
+      +'<h2>مؤشرات الشهر</h2>'+q3Kp([[r.rate==null?'—':r.rate+'%','نسبة الالتزام'],[r.exp,'صلوات مطلوبة'],[r.on,'في الوقت'],[r.late,'متأخر'],[r.abs,'غياب'],[r.bad,'مرفوض'],[r.leave,'بإجازة'],[d.lessons.length,'دروس']])
+      +'<h2>سجل الحضور اليومي</h2>'+q3T(['اليوم',...P.map(p=>p.n)],d.grid.map(g=>q3R([new Date(g.k+'T12:00').toLocaleDateString('ar-PS',{weekday:'short',day:'numeric'}),...g.c.map(c=>({v:(ST[c.st]||'')+(c.rec&&c.rec.at&&(c.st==='ok'||c.st==='late')?' '+fmtT(new Date(c.rec.at)):''),cls:'c '+c.st}))])))
+      +'<h2>الدروس</h2>'+q3T(['التاريخ','الموضوع','النوع','الحضور','المدة'],d.lessons.map(l=>q3R([l.date,l.topic,l.type||'',{v:l.attendees||0,cls:'c'},{v:(l.duration||0)+' د',cls:'c'}])))
+      +'<h2>الإجازات</h2>'+q3T(['النوع','من','إلى','الأيام','الحالة'],d.leaves.map(l=>q3R([l.type,l.from,l.to,{v:daysBetween(l.from,l.to),cls:'c'},leaveState(l)[1]])))
+      +'<h2>البلاغات</h2>'+q3T(['التاريخ','الفئة','الأهمية','الحالة','التفاصيل'],d.reports.map(x=>q3R([x.date,x.category,SEV[x.severity]||'',RST[repStatus(x)]||'',x.notes||''])));
+  }else if(kind==='mosque'){const m=obj,d=q3MosqueData(m);title='تقرير المسجد — '+m.name;sub=[m.area,'الفترة: '+ma].filter(Boolean).join(' · ');
+    body=q3Kp([[d.sum.rate==null?'—':d.sum.rate+'%','التزام المسجد'],[d.allStaff.length,'الموظفون'],[d.sum.on,'في الوقت'],[d.sum.late,'متأخر'],[d.sum.abs,'غياب'],[d.lessons.length,'دروس'],[d.reports.filter(r=>repStatus(r)!=='done').length,'بلاغات مفتوحة']])
+      +'<h2>الكادر</h2>'+q3T(['الاسم','الصفة','الهاتف','المطلوب','في الوقت','متأخر','غياب','الالتزام'],d.allStaff.map(x=>{const r=d.staff.find(y=>y.s.id===x.id)||{};return q3R([x.name,x.role||'',q3Phone(x),{v:r.exp??'—',cls:'c'},{v:r.on??'—',cls:'c'},{v:r.late??'—',cls:'c'},{v:r.abs??'—',cls:'c'},q3RateCell(r.rate??null)])}))
+      +'<h2>الدروس</h2>'+q3T(['التاريخ','الموضوع','المُلقي','الحضور'],d.lessons.map(l=>q3R([l.date,l.topic,staffBy(l.staffId)?.name||'',{v:l.attendees||0,cls:'c'}])))
+      +'<h2>البلاغات</h2>'+q3T(['التاريخ','الفئة','الأهمية','الحالة','التفاصيل'],d.reports.map(x=>q3R([x.date,x.category,SEV[x.severity]||'',RST[repStatus(x)]||'',x.notes||''])));
+  }else if(kind==='month'){const{days,rows}=computeMonth(mk);title='تقرير الحضور الشهري العام';sub='الفترة: '+ma+' · محسوب على '+days.length+' يوماً';
+    const act=rows.filter(r=>r.rate!=null),avg=act.length?Math.round(act.reduce((a,r)=>a+r.rate,0)/act.length):null;
+    body=q3Kp([[rows.length,'موظفون بحسابات'],[avg==null?'—':avg+'%','متوسط الالتزام'],[act.filter(r=>r.rate>=90).length,'التزام ممتاز (90%+)'],[act.filter(r=>r.rate<70).length,'التزام ضعيف (أقل من 70%)']])
+      +q3T(['#','الاسم','الصفة','المسجد','المطلوب','في الوقت','متأخر','غياب','مرفوض','إجازة','الالتزام','الدروس'],rows.map((r,i)=>q3R([{v:i+1,cls:'c'},r.s.name,r.s.role||'',mosque(r.s.mosqueId)?.name||'—',{v:r.exp,cls:'c'},{v:r.on,cls:'c'},{v:r.late,cls:'c'},{v:r.abs,cls:'c'},{v:r.bad,cls:'c'},{v:r.leave,cls:'c'},q3RateCell(r.rate),{v:r.les,cls:'c'}])));
+  }else if(kind==='mosques'){title='تقرير المساجد';
+    body=q3T(['#','المسجد','الموقع','الموظفون','الالتزام','الدروس','بلاغات مفتوحة','بلاغات مغلقة'],S.mosques.map((m,i)=>{const d=q3MosqueData(m);return q3R([{v:i+1,cls:'c'},m.name,m.area||'',{v:d.allStaff.length,cls:'c'},q3RateCell(d.sum.rate),{v:d.lessons.length,cls:'c'},{v:d.reports.filter(r=>repStatus(r)!=='done').length,cls:'c'},{v:d.reports.filter(r=>repStatus(r)==='done').length,cls:'c'}])}));
+  }else if(kind==='lessons'){const L=lessonsOf(S.monthDocs);title='سجل الدروس والأنشطة';
+    body=q3Kp([[L.length,'درساً'],[L.reduce((a,l)=>a+(+l.attendees||0),0),'إجمالي الحضور'],[new Set(L.map(l=>l.mosqueId)).size,'مسجداً']])
+      +q3T(['التاريخ','الموضوع','النوع','المسجد','المُلقي','الحضور','المدة'],L.map(l=>q3R([l.date,l.topic,l.type||'',mosque(l.mosqueId)?.name||'',staffBy(l.staffId)?.name||'',{v:l.attendees||0,cls:'c'},{v:(l.duration||0)+' د',cls:'c'}])));
+  }else if(kind==='reports'){const all=S.reports,open=all.filter(r=>repStatus(r)!=='done');title='تقرير بلاغات المساجد';sub='حتى تاريخه';
+    body=q3Kp([[open.filter(r=>r.severity==='high').length,'عاجل مفتوح'],[open.length,'مفتوح'],[all.length-open.length,'مغلق']])
+      +'<h2>المفتوحة</h2>'+q3T(['التاريخ','المسجد','الفئة','الأهمية','الحالة','المُبلِّغ','التفاصيل'],open.map(x=>q3R([x.date,mosque(x.mosqueId)?.name||'',x.category,SEV[x.severity]||'',RST[repStatus(x)]||'',staffBy(x.staffId)?.name||'',x.notes||''])))
+      +'<h2>المغلقة</h2>'+q3T(['التاريخ','المسجد','الفئة','التفاصيل'],all.filter(r=>repStatus(r)==='done').map(x=>q3R([x.date,mosque(x.mosqueId)?.name||'',x.category,x.notes||''])));
+  }else if(kind==='leaves'){title='تقرير الإجازات';
+    const L=S.staff.filter(x=>x.uid).flatMap(x=>leavesOf(x.uid).map(l=>({l,x}))).filter(({l})=>(l.from||'').slice(0,7)<=mk&&(l.to||'').slice(0,7)>=mk);
+    body=q3T(['الاسم','المسجد','النوع','من','إلى','الأيام','الحالة','البديل'],L.map(({l,x})=>q3R([x.name,mosque(x.mosqueId)?.name||'',l.type,l.from,l.to,{v:daysBetween(l.from,l.to),cls:'c'},leaveState(l)[1],l.subName||l.substitute||''])));
+  }else if(kind==='directory'){title='دليل الأئمة والمؤذنين';sub='حتى تاريخه';
+    const list=S.staff.slice().sort((a,b)=>(mosque(a.mosqueId)?.name||'').localeCompare(mosque(b.mosqueId)?.name||'','ar'));
+    body=q3T(['#','الاسم','الصفة','المسجد','الهاتف','الحساب'],list.map((x,i)=>q3R([{v:i+1,cls:'c'},x.name,x.role||'',mosque(x.mosqueId)?.name||'',q3Phone(x),x.uid?'مفعّل':'—'])));
+  }
+  const html=q3Doc(title,sub,body);
+  const fr=document.createElement('iframe');fr.style.cssText='position:fixed;width:0;height:0;border:0;left:-9999px';document.body.append(fr);
+  const dc=fr.contentDocument;dc.open();dc.write(html);dc.close();
+  const go=()=>{try{fr.contentWindow.focus();fr.contentWindow.print()}catch(e){const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),600)}}setTimeout(()=>fr.remove(),60000)};
+  (dc.fonts&&dc.fonts.ready?dc.fonts.ready:Promise.resolve()).then(()=>setTimeout(go,300));
+}
+
 /* ================= Live header + glass tabs (admin) ================= */
 const{gIcon,gRipple,liveHeader}=(()=>{
 const G_ICONS={
+  q360:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 7v4l2.5 1.5"/>',
+  printer:'<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
   accounts:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
   apps:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
   today:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
